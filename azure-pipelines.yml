@@ -15,6 +15,34 @@ variables:
   buildConfiguration: 'Release'
 
 steps:
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      # Ensure the OAuth token is available; you must have "Allow scripts to access the OAuth token" enabled.
+      if (-not $env:SYSTEM_ACCESSTOKEN) {
+          Write-Error "SYSTEM_ACCESSTOKEN is not available."
+          exit 1
+      }
+      
+      # Construct the URL to retrieve connection data.
+      $collectionUri = "$(System.CollectionUri)"
+      $uri = "$collectionUri/_apis/connectionData?api-version=6.0"
+      Write-Output "Calling: $uri"
+      
+      # Call the REST API using the OAuth token.
+      $headers = @{
+          Authorization = "Bearer $env:SYSTEM_ACCESSTOKEN"
+      }
+      $response = Invoke-RestMethod -Uri $uri -Headers $headers
+      
+      # Log out the identity details.
+      Write-Output "Connected identity details:"
+      Write-Output ($response.authenticatedUser | ConvertTo-Json -Depth 5)
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
 - task: NuGetToolInstaller@1
 
 - task: NuGetCommand@2
