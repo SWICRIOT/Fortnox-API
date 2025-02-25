@@ -1,0 +1,68 @@
+# ASP.NET Core (.NET Framework)
+# Build and test ASP.NET Core projects targeting the full .NET Framework.
+# Add steps that publish symbols, save build artifacts, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
+
+trigger:
+- master
+
+pool:
+  Galaxy Book
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+
+steps:
+
+- task: PowerShell@2
+  inputs:
+    targetType: 'inline'
+    script: |
+      # Ensure the OAuth token is available; you must have "Allow scripts to access the OAuth token" enabled.
+      if (-not $env:SYSTEM_ACCESSTOKEN) {
+          Write-Error "SYSTEM_ACCESSTOKEN is not available."
+          exit 1
+      }
+      
+      # Construct the URL to retrieve connection data.
+      $collectionUri = "$(System.CollectionUri)"
+      $uri = "$collectionUri/_apis/connectionData?api-version=6.0-preview"
+      Write-Output "Calling: $uri"
+      
+      # Call the REST API using the OAuth token.
+      $headers = @{
+          Authorization = "Bearer $env:SYSTEM_ACCESSTOKEN"
+      }
+      $response = Invoke-RestMethod -Uri $uri -Headers $headers
+      
+      # Log out the identity details.
+      Write-Output "Connected identity details:"
+      Write-Output ($response.authenticatedUser | ConvertTo-Json -Depth 5)
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+- task: NuGetToolInstaller@1
+
+- task: NuGetCommand@2
+  inputs:
+    restoreSolution: '$(solution)'
+
+- task: VSBuild@1
+  inputs:
+    solution: '$(solution)'
+    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\WebApp.zip" /p:DeployIisAppPath="Default Web Site" /m:1'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+
+#- task: VSTest@2
+#  inputs:
+#    platform: '$(buildPlatform)'
+#    configuration: '$(buildConfiguration)'
+
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'push'
+    packagesToPush: '**/*.nupkg'
+    publishVstsFeed: 'HBKFortnoxAPI'
